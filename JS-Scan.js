@@ -13,7 +13,7 @@ const URL_BASE_META = "https://maps.googleapis.com/maps/api/streetview/metadata?
 function getUserInput() {
     let start = prompt("Input coordinates of the northwest corner.\n" +
                         "FORMAT: LATITUDE, LONGITUDE", "37.43526, -67.43312");
-    let end = prompt("Input coordinates of the southwest corner\n" +
+    let end = prompt("Input coordinates of the southeast corner\n" +
                       "FORMAT: LATITUDE, LONGITUDE", "37.43526, -67.43312");
     let key = prompt("Insert Google API key with usage and billing enabled.");
     if (start != null && end != null && key != null) {
@@ -25,10 +25,16 @@ function getUserInput() {
         end[1] = Number(end[1]);
         let numRequests = (Math.floor(Math.abs(end[0] - start[0]) / INCREMENT) + 1)
                         * (Math.floor(Math.abs(end[1] - start[1]) / INCREMENT) + 1);
-        alert("The given input will create " + numRequests +
-                " HTTP requests.\n" + "Expected load time is at least:\n" +
-                getLoadTime(numRequests)
-             );
+        if (numRequests >= 300000) {
+            splitGrid(start, end, numRequests);
+            alert(`It is inadvisable to exceed 300K requests in one browser session. `
+                  + `Visit the console to see a revised group of input coordinates.`);
+                  return;
+        } else {
+            alert("The given input will create " + numRequests + "HTTP requests.\n"
+                  + "Expected load time is at least:\n"
+                   + getLoadTime(numRequests));
+        }
         scrapeGSV(start, end, key);
     }
 }
@@ -63,6 +69,9 @@ function scrapeGSV(start, end, key) {
             http.send();
             let response = JSON.parse(http.responseText);
             switch (responseType(response, seenIDs)) {
+                case -1:
+                    alert("OVER QUERY LIMIT!!");
+                    return;
                 case 0:
                     errorObj.noResult++;
                     break;
@@ -105,14 +114,10 @@ function finalReport(numRequests, errorObj) {
             "Order of filtration is as given. Furthermore, a small number of " +
             "repeated queries is good to ensure that all panoramas are visited."
         );
-        //Do the python and...
-        //-ESTMIATED COST TO DOWNLOAD/RETRIEVE ALL PICTURES
-        //-ESTIMATED STORAGE TO DOWNLOAD ALL PICTURES
 }
 
 
-// Determines how old a date is from today.
-//date is a string in format YYYY-MM
+//date = "YYYY-MM"
 //returns the difference in months
 function dateDifference(date) {
     let now = new Date();
@@ -126,9 +131,55 @@ function dateDifference(date) {
 
 //error checking for HTML requests
 function responseType(response, seenIDs) {
+    if (response.status === "OVER_QUERY_LIMIT") return -1;
     if (response.status !== "OK") return 0; //no results
     if (seenIDs.has(response.pano_id)) return 1; //repeat
     if (response.copyright !== "© Google, Inc.") return 2; //non-google
     if (dateDifference(response.date) >= 12) return 3; //older than a year
     return 4;
+}
+
+//************************************************
+//UTILITY FUNCTIONS, NOT INTENDED FOR NORMAL USAGE
+//************************************************
+function testLimit(limit) {
+    let i = 0;
+    for (i; i < limit; i++) {
+        let http = new XMLHttpRequest();
+        http.open("GET", "https://maps.googleapis.com/maps/api/streetview/metadata?location=33.021440,-97.022430&key=AIzaSyDa7UWW2ilr-9FNoloo21OFlfw5glemETA", false);
+        http.send();
+        let response = JSON.parse(http.responseText);
+        if (response.status === "OVER_QUERY_LIMIT") {
+            break;
+        }
+    }
+    console.log(i);
+    document.getElementById("output").innerHTML += "<br><br>" + i;
+}
+
+
+
+//nw = [LAT,LNG] of northwest corner
+//sw = [LAT,LNG] of southwest corner
+//splits divisions into at most 300K XHR's
+function splitGrid(nw, se, bigNum) {
+    let numDivisions = Math.ceil(Math.log2(bigNum/300000));
+    let lngSpan = Math.abs(nw[1] - se[1]);
+    let latSpan = Math.abs(nw[0] - se[0]);
+    let lngSpce = lngSpan / Math.ceil(numDivisions/2) / 2;
+    let latSpce;
+    if (numDivisions === 1) {
+        latSpce = latSpan;
+    } else {
+        latSpce = latSpan / Math.floor(numDivisions/2) / 2;
+    }
+    for (let i = 0; i < lngSpan/lngSpce; i++) {
+        for (let j = 0; j < latSpan/latSpce; j++) {
+            console.log(
+                `NW${i},${j}: ${nw[0] - j*latSpce}, ${nw[1] + i*lngSpce}\n` +
+                `SW${i},${j}: ${nw[0] - (j+1)*latSpce}, ${nw[1] + (i+1)*lngSpce}\n`
+            );
+        }
+    }
+
 }
