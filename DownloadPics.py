@@ -35,13 +35,12 @@ class UserInput:
         return xReq * yReq
 
 class MetaInfo:
-    counter = 0
-    noResult = 0
     error = 0
+    noResult = 0
+    counter = 0
     notGoogle = 0
-    tooOld = 0
     repeat = 0
-    lastPano = ''
+    seenPanos = ""
 
 #returns date difference in years
 def dateDiff(r):
@@ -51,27 +50,30 @@ def dateDiff(r):
     return d1 - d2
 
 def isGoodResponse(r, metaInfo):
-    if r['status'] == 'ZERO_RESULTS':
-        metaInfo.noResult += 1
-        return False
     if r['status'] != 'OK':
         metaInfo.error += 1
         return False
-    if metaInfo.lastPano == r['pano_id']:
+    if r['status'] == 'ZERO_RESULTS':
+        metaInfo.noResult += 1
+        return False
+    if r['pano_id'] + "," in metaInfo.seenPanos:
         metaInfo.repeat += 1
         return False
-    metaInfo.lastPano = r['pano_id']
+    metaInfo.seenPanos += r['pano_id'] + ","
     if r['copyright'] != '© Google, Inc.':
         metaInfo.notGoogle += 1
         return False
-    if dateDiff(r) >= 1: #older than one year
-        metaInfo.tooOld += 1 #not ideal, but allowed
     return True
 
 def finalReport(metaInfo, outFile):
     outFile.write("############################################\n")
-
-
+    outFile.write("SCAN STATISTICS:\n")
+    outFile.write("Number of Requests: " + str(metaInfo.counter) + "\n")
+    outFile.write("error: " + str(metaInfo.error) + "\n")
+    outFile.write("No Result: " + str(metaInfo.noResult) + "\n")
+    outFile.write("Repeated: " + str(metaInfo.repeat) + "\n")
+    outFile.write("Not Google: " + str(metaInfo.notGoogle) + "\n")
+    outFile.write("Note: Filtration sequence is listed top to bottom...\n")
     outFile.write("############################################\n")
 
 def scanGrid(outFile, inputFromUser):
@@ -94,11 +96,6 @@ def scanGrid(outFile, inputFromUser):
 
 def main():
     inputFromUser = UserInput()
-    print("HTTP Requests to make:" + str(inputFromUser.numRequests()))
-    #Give an estimate of time and storage costs
-    #-----------IMPLEMENTATION GAP -------------------
+    print("HTTP Requests to make: " + str(inputFromUser.numRequests()))
     with open(inputFromUser.fPath + "/output.txt", "w+") as outFile:
         scanGrid(outFile, inputFromUser)
-    with open(inputFromUser.fPath + "/output.txt", "r+") as f:
-        pass
-        #check f for repetitions
