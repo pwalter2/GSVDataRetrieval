@@ -1,13 +1,14 @@
-# DownloadPics.py
-# Downloads pictures from a formatted text file
-# Each line in the input text file specifies a pano_id
-# with an associated google street view image to download
+# ScanMetadata.py
+# Scrapes google street view Metadata
+# Outputs processed results to a text file called output.txt
+# output file can be fed into DownloadPictures.py to get .png's
 
 
 import requests
 import math
 import datetime
 
+#class UserInput collects and holds all the input parameters
 class UserInput:
     def __init__(self):
         start = input('Input "Lat,Lng" of NW corner:').split(',')
@@ -21,10 +22,12 @@ class UserInput:
             end.remove(elem)
         self.end = tuple(end)
         self.key = input('Input google API key:')
-        print("Default increment is 0.00005")
-        self.increment = float(input('Input coordinate increment:'))
+        print("Default increment is 0.0001")
+        self.increment = input('Input coordinate increment:')
         if self.increment == '':
-            self.increment = 0.00005
+            self.increment = 0.0001
+        else:
+            self.increment = float(self.increment)
         print("example pathname /Users/paulwalter/Desktop")
         self.fPath = input('Input file path for output location:')
     def numRequests(self):
@@ -34,6 +37,7 @@ class UserInput:
         yReq = math.floor(span2 / self.increment) + 1
         return xReq * yReq
 
+#an object to hold information about the HTTP requests
 class MetaInfo:
     error = 0
     noResult = 0
@@ -49,6 +53,7 @@ def dateDiff(r):
     d2 = float(r['date'][:4]) + float(r['date'][5:]) / 12
     return d1 - d2
 
+#checks if the returned JSON is acceptable data 
 def isGoodResponse(r, metaInfo):
     if r['status'] == 'ZERO_RESULTS':
         metaInfo.noResult += 1
@@ -68,12 +73,12 @@ def isGoodResponse(r, metaInfo):
 def finalReport(metaInfo, outFile):
     outFile.write("############################################\n")
     outFile.write("SCAN STATISTICS:\n")
-    outFile.write("Number of Requests: " + str(metaInfo.counter) + "\n")
-    outFile.write("error: " + str(metaInfo.error) + "\n")
     outFile.write("No Result: " + str(metaInfo.noResult) + "\n")
+    outFile.write("unknown_error: " + str(metaInfo.error) + "\n")
     outFile.write("Repeated: " + str(metaInfo.repeat) + "\n")
     outFile.write("Not Google: " + str(metaInfo.notGoogle) + "\n")
     outFile.write("Note: Filtration sequence is listed top to bottom...\n")
+    outFile.write("Number of Requests: " + str(metaInfo.counter) + "\n")
     outFile.write("############################################\n")
 
 def scanGrid(outFile, inputFromUser):
@@ -86,6 +91,7 @@ def scanGrid(outFile, inputFromUser):
         while lngCoord <= inputFromUser.end[1]:
             params['location'] = str(latCoord) + "," + str(lngCoord)
             try:
+                print(params['location'])
                 r = requests.get(metaBaseUrl, params=params).json()
             except Exception:
                 outFile.write("WARNING: " + str(Exception) + "\n")
@@ -94,7 +100,7 @@ def scanGrid(outFile, inputFromUser):
                 return
             metaInfo.counter += 1
             if isGoodResponse(r, metaInfo):
-                outFile.write(r['pano_id'] + ",\n")
+                outFile.write(r['pano_id'] + "\n")
             lngCoord += inputFromUser.increment
         latCoord -= inputFromUser.increment
         lngCoord = inputFromUser.start[1]
@@ -102,6 +108,9 @@ def scanGrid(outFile, inputFromUser):
 
 def main():
     inputFromUser = UserInput()
-    print("HTTP Requests to make: " + str(inputFromUser.numRequests()))
+    numReq = inputFromUser.numRequests()
+    print("HTTP Requests to make: " + str(numReq))
+    print("Output .txt file max size: " + str(numReq * 24) + " bytes")
+    print("Estimated execution time: " + str(numReq / 8.6 / 3600) + " hours")
     with open(inputFromUser.fPath + "/output.txt", "w+") as outFile:
         scanGrid(outFile, inputFromUser)
